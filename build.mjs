@@ -7,6 +7,7 @@ import { marked } from 'marked';
 // Netlify define URL en el build; para deploy manual: SITE_URL=https://xxx.netlify.app npm run build
 const SITE = (process.env.SITE_URL || process.env.URL || 'http://localhost:8888').replace(/\/$/, '');
 const DOCS = 'https://docs.near.org';
+const BLOG = 'https://neardev.substack.com';  // ponytail: asume que Substack conserva el slug del <link> (verificado con we-have-a-blog)
 
 // Imágenes con hash de Docusaurus que ya no existen en producción
 const RENAMES = {
@@ -29,8 +30,15 @@ function absolutize(html) {
   for (const [from, to] of Object.entries(RENAMES)) html = html.replaceAll(from, to);
   return html
     .replace(/(src|srcset)="\/(?!\/)/g, `$1="${SITE}/`)
-    .replace(/href="\/(?!\/)/g, `href="${DOCS}/`);
+    .replace(/href="\/(?!\/)/g, `href="${DOCS}/`)
+    .replace(/href="https:\/\/docs\.near\.org\/blog\//g, `href="${BLOG}/p/`);
 }
+
+// Substack no mapea autores externos: firma visible al inicio del post
+const byline = (ids) => ids.length ? `<p><em>By ${ids.map((a) => {
+  const { name = a, url } = authors[a] || {};
+  return url ? `<a href="${url}">${esc(name.trim())}</a>` : esc(name.trim());
+}).join(', ')}</em></p>\n` : '';
 
 const posts = fs.readdirSync('posts').filter((f) => f.endsWith('.md')).sort().reverse().map((file) => {
   const { data, content } = matter(fs.readFileSync(`posts/${file}`, 'utf8'));
@@ -41,14 +49,14 @@ const posts = fs.readdirSync('posts').filter((f) => f.endsWith('.md')).sort().re
     date: new Date(file.slice(0, 10) + 'T12:00:00Z'),
     authors: (data.authors || []).map((a) => authors[a]?.name?.trim() || a),
     tags: data.tags || [],
-    html: absolutize(marked.parse(md)),
+    html: byline(data.authors || []) + absolutize(marked.parse(md)),
   };
 });
 
 const items = posts.map((p) => `
     <item>
       <title>${esc(p.title)}</title>
-      <link>${DOCS}/blog/${p.slug}</link>
+      <link>${BLOG}/p/${p.slug}</link>
       <guid isPermaLink="false">${p.slug}</guid>
       <pubDate>${p.date.toUTCString()}</pubDate>
       <dc:creator>${esc(p.authors.join(', '))}</dc:creator>
@@ -60,7 +68,7 @@ const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
     <title>NEAR Docs Blog</title>
-    <link>${DOCS}/blog</link>
+    <link>${BLOG}</link>
     <description>NEAR documentation dev blog</description>${items}
   </channel>
 </rss>
